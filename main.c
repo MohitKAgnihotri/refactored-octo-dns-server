@@ -199,6 +199,7 @@ void *pthread_routine(void *arg)
         int dns_request_length = buffer[0] << 16 | buffer[1];
 
         decode_dns_msg( &dns_request_msg, &buffer[2], dns_request_length);
+        int incoming_request_id = dns_request_msg.id;
         print_message(&dns_request_msg);
 
         // enter critical section
@@ -215,7 +216,6 @@ void *pthread_routine(void *arg)
         // send the DNS request to next level server
         send_dns_request(upstream_server_sockfd, "8.8.8.8", &buffer[2], dns_request_length);
 
-
         // Wait for the response
         memset(buffer, 0x00, SOCKET_BUFF_SIZE);
         socklen_t len;
@@ -227,7 +227,20 @@ void *pthread_routine(void *arg)
         }
 
         // Send the response to the server
-        int bytes_written = write(client_socket,buffer,bytes_received);
+        uint8_t *response_msg = malloc(sizeof(char) * bytes_received + 2);
+        uint8_t *resp_ptr = response_msg;
+        memset(response_msg, 0x00, sizeof(char) * (bytes_received + 2));
+
+        // add length
+        put16bits(&response_msg,bytes_received);
+
+        // add oroginal request
+        put16bits(&response_msg,incoming_request_id);
+
+        // copy the response received from the server
+        memcpy(response_msg, &buffer[2], bytes_received-2);
+
+        int bytes_written = write(client_socket,resp_ptr,bytes_received+2);
         if (bytes_written <= 0)
         {
             perror("error in write");
