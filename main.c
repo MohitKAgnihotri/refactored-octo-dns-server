@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <semaphore.h>
+#include <netdb.h>
+#include "helper1.h"
 #include "dns.h"
 
 #define SOCKET_BUFF_SIZE 1500
@@ -24,6 +27,11 @@ int CreateServerSocket(int port);
 
 int server_socket_fd;
 
+// Semaphore of the File access
+sem_t sem_io;
+
+FILE *fp = NULL;
+
 int main(int argc, char *argv[])
 {
     int port, new_socket_fd;
@@ -41,6 +49,12 @@ int main(int argc, char *argv[])
 
     /*Setup the signal handler*/
     SetupSignalHandler();
+
+    /* Setup the semaphore of IO*/
+    sem_init(&sem_io,0,1);
+
+    /*Setup the file pointer for the log file*/
+    fp = fopen("./dns_svr.log","wb");
 
     /* Initialise pthread attribute to create detached threads. */
     if (pthread_attr_init(&pthread_client_attr) != 0) {
@@ -127,6 +141,43 @@ void SetupSignalHandler() {/* Assign signal handlers to signals. */
     }
 }
 
+int send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_len)
+{
+    struct sockaddr_in     servaddr;
+    struct hostent *server_host;
+
+    /* Get server host from server name. */
+    server_host = gethostbyname(server_name);
+
+    // Filling server information
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(53);
+    memcpy(&servaddr.sin_addr.s_addr, server_host->h_addr, server_host->h_length);
+
+    int bytes_sent = sendto(socket, buffer, buffer_len,
+                            0, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+    if (bytes_sent <= 0)
+    {
+        perror("sendto");
+        return -1;
+    }
+    return 0;
+}
+
+
+int SetupUpstreamServerSocket(char *servername)
+{
+    int sockfd;
+    // Creating socket file descriptor
+    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
+    {
+        perror("socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+    return sockfd;
+}
+
 void *pthread_routine(void *arg)
 {
     //Read from the client socket and print the received message on the screen
@@ -136,13 +187,55 @@ void *pthread_routine(void *arg)
     int client_socket = *(int*) arg;
     free(arg);
 
+    /* Setup UDP client socket for upstream server */
+    int upstream_server_sockfd = SetupUpstreamServerSocket("8.8.8.8");
+
     int bytes_read = read(client_socket, buffer, SOCKET_BUFF_SIZE);
     if (bytes_read > 0)
     {
         message_t dns_request_msg;
         memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
-        decode_dns_msg( &dns_request_msg, &buffer[2], bytes_read);
+
+        int dns_request_length = buffer[0] << 16 | buffer[1];
+
+        decode_dns_msg( &dns_request_msg, &buffer[2], dns_request_length);
         print_message(&dns_request_msg);
+
+        // enter critical section
+        // 1. Open file
+        // 2. Write to the file.
+        // 3. Close the file
+        // Exit Critical section
+        sem_wait(&sem_io);
+        updatefile(fp,dns_request_msg.questions->qName);
+        sem_post(&sem_io);
+
+        // Check if the request can be served from local cache
+
+        // send the DNS request to next level server
+        send_dns_request(upstream_server_sockfd, "8.8.8.8", &buffer[2], dns_request_length);
+
+
+        // Wait for the response
+        memset(buffer, 0x00, SOCKET_BUFF_SIZE);
+        socklen_t len;
+        struct sockaddr_in     servaddr;
+        int bytes_received = recvfrom(upstream_server_sockfd, buffer, SOCKET_BUFF_SIZE,MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+        if (bytes_received <= 0)
+        {
+            perror("error in recvfrom");
+        }
+
+        // Send the response to the server
+        int bytes_written = write(client_socket,buffer,bytes_received);
+        if (bytes_written <= 0)
+        {
+            perror("error in write");
+        }
+
+        // Update the cache
+
+
     }
     else if (bytes_read  == 0)
     {
@@ -159,5 +252,6 @@ void *pthread_routine(void *arg)
 void signal_handler(int signal_number)
 {
     close(server_socket_fd);
+    fclose(fp);
     exit(0);
 }
