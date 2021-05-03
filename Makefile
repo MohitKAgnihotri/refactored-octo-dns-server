@@ -5,7 +5,7 @@
 # BIN - binary
 CC=clang
 OBJ=helper1.o
-COPT=-Wall -Wpedantic -g
+COPT=-Wall -Wpedantic -g -lpthread
 BIN_PHASE1=phase1
 BIN_PHASE2=dns_query
 
@@ -17,7 +17,7 @@ all: $(BIN_PHASE1) $(BIN_PHASE2)
 #     <tab>commands_to_make_target
 # (Note that spaces will not work.)
 
-$(BIN_PHASE2): main.c $(OBJ)
+$(BIN_PHASE2): main.c dns.c helper1.c $(OBJ)
 	$(CC) -o $(BIN_PHASE2) main.c $(OBJ) $(COPT)
 
 $(BIN_PHASE1): phase1.c $(OBJ)
