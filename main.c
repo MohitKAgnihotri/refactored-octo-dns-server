@@ -15,6 +15,10 @@
 #define PORT_NUM 8053
 
 
+int next_hierarchy_dns_server_port;
+char * next_hierarchy_dns_server_name;
+
+
 /* Thread routine to serve connection to client. */
 void *pthread_routine(void *arg);
 
@@ -39,6 +43,15 @@ int main(int argc, char *argv[])
     pthread_t pthread;
     socklen_t client_address_len;
     struct sockaddr_in client_address;
+
+    if (argc < 3)
+    {
+        printf("Incorrect number of parameter \n");
+        exit(0);
+    }
+
+    next_hierarchy_dns_server_name = argv[1];
+    next_hierarchy_dns_server_port = atoi(argv[2]);
 
     /* Get port from command line arguments or stdin.
      * For this server, this is fixed to 1113*/
@@ -152,7 +165,7 @@ int send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_
     // Filling server information
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(53);
+    servaddr.sin_port = htons(next_hierarchy_dns_server_port);
     memcpy(&servaddr.sin_addr.s_addr, server_host->h_addr, server_host->h_length);
 
     int bytes_sent = sendto(socket, buffer, buffer_len,
@@ -188,7 +201,7 @@ void *pthread_routine(void *arg)
     free(arg);
 
     /* Setup UDP client socket for upstream server */
-    int upstream_server_sockfd = SetupUpstreamServerSocket("8.8.8.8");
+    int upstream_server_sockfd = SetupUpstreamServerSocket(next_hierarchy_dns_server_name);
 
     int bytes_read = read(client_socket, buffer, SOCKET_BUFF_SIZE);
     if (bytes_read > 0)
