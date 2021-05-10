@@ -221,7 +221,11 @@ void *pthread_routine(void *arg)
         // 3. Close the file
         // Exit Critical section
         sem_wait(&sem_io);
-        updatefile(fp,dns_request_msg.questions->qName);
+        updatefile_requested(fp,dns_request_msg.questions->qName);
+        if (dns_request_msg.questions->qType != AAAA_Resource_RecordType)
+        {
+            updatefile_unimplemented_request(fp);
+        }
         sem_post(&sem_io);
 
         // Check if the request can be served from local cache
@@ -238,6 +242,13 @@ void *pthread_routine(void *arg)
         {
             perror("error in recvfrom");
         }
+
+        memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
+
+        decode_dns_msg( &dns_request_msg, buffer, bytes_received);
+        sem_wait(&sem_io);
+        updatefile_ipaddress(fp, &dns_request_msg);
+        sem_post(&sem_io);
 
         // Send the response to the server
         uint8_t *response_msg = malloc(sizeof(char) * bytes_received + 2);

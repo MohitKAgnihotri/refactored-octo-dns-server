@@ -83,10 +83,12 @@ void print_message(message_t *msg)
     printf("}\n");
 }
 
-char *decode_domain_name(const uint8_t **buf, size_t len)
+char *decode_domain_name(const uint8_t **buf, uint32_t len)
 {
     char domain[256];
-    for (int i = 1; i < MIN(256, len); i += 1) {
+    int i;
+    for (i = 1; i < MIN(256, len); i += 1)
+    {
         uint8_t c = (*buf)[i];
         if (c == 0) {
             domain[i - 1] = 0;
@@ -150,7 +152,6 @@ void decode_dns_header(message_t *msg, const uint8_t **buffer)
 
 int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
 {
-
     assert(msg != NULL);
     assert(buffer != NULL);
     decode_dns_header(msg, &buffer);
@@ -171,6 +172,23 @@ int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
         // prepend question to questions list
         q->next = msg->questions;
         msg->questions = q;
+    }
+
+    // parse answers
+    for (int i = 0; i < msg->anCount; ++i)
+    {
+        resource_record_t *q = malloc(sizeof(resource_record_t));
+        q->name = strdup(msg->questions->qName);
+        get16bits(&buffer);
+        q->type = get16bits(&buffer);
+        q->class = get16bits(&buffer);
+        q->ttl =  get16bits(&buffer) << 16 | get16bits(&buffer);
+        q->rd_length = get16bits(&buffer);
+        memcpy(&q->rd_data.aaaa_record, buffer,q->rd_length);
+
+        // prepend question to questions list
+        q->next = msg->answers;
+        msg->answers = q;
     }
     return 0;
 }
