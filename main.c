@@ -14,6 +14,8 @@
 #define BACKLOG 10
 #define PORT_NUM 8053
 
+// enable NON-Blocking feature
+#define NONBLOCKING 1
 
 int next_hierarchy_dns_server_port;
 char * next_hierarchy_dns_server_name;
