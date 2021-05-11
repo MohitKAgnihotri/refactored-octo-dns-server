@@ -84,7 +84,7 @@ void updatefile_ipaddress(FILE *fp, message_t *parsed_dns_message)
 
         info = localtime(&rawtime);
         strftime(buffer, 80, "%FT%T%z", info);
-        fprintf(fp, "%s %s  is at  %s\n", buffer, parsed_dns_message->answers->name, string_ipv6);
+        fprintf(fp, "%s %s is at %s\n", buffer, parsed_dns_message->answers->name, string_ipv6);
         fflush(fp);
     }
 }

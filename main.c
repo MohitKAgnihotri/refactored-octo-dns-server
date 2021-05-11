@@ -322,7 +322,6 @@ void *pthread_routine(void *arg)
     {
         perror("socket read error \n");
     }
-
     return NULL;
 }
 
