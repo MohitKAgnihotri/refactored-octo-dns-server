@@ -125,14 +125,14 @@ typedef struct message {
     /* Flags */
     union {
         struct {
-            uint16_t qr:1;
-            uint16_t Opcode:4;
-            uint16_t aa:1;
-            uint16_t tc:1;
-            uint16_t rd:1;
+            uint16_t rcode:4;
+            uint16_t z:3;
             uint16_t ra:1;
-            uint16_t z:1;
-            uint16_t rcode:3;
+            uint16_t rd:1;
+            uint16_t tc:1;
+            uint16_t aa:1;
+            uint16_t Opcode:4;
+            uint16_t qr:1;
         }u;
         uint16_t field;
     }byte;
@@ -156,6 +156,7 @@ typedef struct message {
 }message_t;
 
 int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size);
+int encode_msg(message_t *msg, uint8_t **buffer);
 void print_message(message_t *msg);
 
 #endif //REFACTORED_OCTO_DNS_SERVER__DNS_H

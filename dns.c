@@ -193,3 +193,73 @@ int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
     return 0;
 }
 
+int encode_resource_records(resource_record_t *rr, uint8_t **buffer)
+{
+    int i;
+    while (rr) {
+        // Answer questions by attaching resource sections.
+        encode_domain_name(buffer, rr->name);
+        put16bits(buffer, rr->type);
+        put16bits(buffer, rr->class);
+        put32bits(buffer, rr->ttl);
+        put16bits(buffer, rr->rd_length);
+
+        switch (rr->type) {
+            case A_Resource_RecordType:
+                for(i = 0; i < 4; ++i)
+                    put8bits(buffer, rr->rd_data.a_record.addr[i]);
+                break;
+            case AAAA_Resource_RecordType:
+                for(i = 0; i < 16; ++i)
+                    put8bits(buffer, rr->rd_data.aaaa_record.addr[i]);
+                break;
+            case TXT_Resource_RecordType:
+                put8bits(buffer, rr->rd_data.txt_record.txt_data_len);
+                for(i = 0; i < rr->rd_data.txt_record.txt_data_len; i++)
+                    put8bits(buffer, rr->rd_data.txt_record.txt_data[i]);
+                break;
+            default:
+                fprintf(stderr, "Unknown type %u. => Ignore resource record.\n", rr->type);
+                return 1;
+        }
+
+        rr = rr->next;
+    }
+
+    return 0;
+}
+
+
+void encode_header(message_t *msg, uint8_t **buffer)
+{
+    put16bits(buffer, msg->id);
+    put16bits(buffer, msg->byte.field);
+    put16bits(buffer, msg->qdCount);
+    put16bits(buffer, msg->anCount);
+    put16bits(buffer, msg->nsCount);
+    put16bits(buffer, msg->arCount);
+}
+
+int encode_msg(message_t *msg, uint8_t **buffer)
+{
+    question_t *q;
+    int rc;
+
+    encode_header(msg, buffer);
+
+    q = msg->questions;
+    while (q) {
+        encode_domain_name(buffer, q->qName);
+        put16bits(buffer, q->qType);
+        put16bits(buffer, q->qClass);
+        q = q->next;
+    }
+
+    rc = 0;
+    rc |= encode_resource_records(msg->answers, buffer);
+    rc |= encode_resource_records(msg->authorities, buffer);
+    rc |= encode_resource_records(msg->additionals, buffer);
+
+    return rc;
+}
+
