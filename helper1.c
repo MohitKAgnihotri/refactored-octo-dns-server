@@ -36,10 +36,8 @@ void put32bits(uint8_t **buffer, uint32_t value)
     *buffer += 4;
 }
 
-void updatefile_requested(FILE *fp, char *domainName)
+void updatefile_requested(int file_desc, char *domainName)
 {
-    if (fp)
-    {
         time_t rawtime;
         struct tm *info;
         char buffer[80];
@@ -48,32 +46,24 @@ void updatefile_requested(FILE *fp, char *domainName)
 
         info = localtime(&rawtime);
         strftime(buffer, 80, "%FT%T%z", info);
-        fprintf(fp, "%s %s %s\n", buffer, "requested", domainName);
-        fflush(fp);
-    }
+        dprintf(file_desc, "%s %s %s\n", buffer, "requested", domainName);
 }
 
-void updatefile_unimplemented_request(FILE *fp)
+void updatefile_unimplemented_request(int file_desc)
 {
-    if (fp)
-    {
+
         time_t rawtime;
         struct tm *info;
         char buffer[80];
-
         time(&rawtime);
 
         info = localtime(&rawtime);
         strftime(buffer, 80, "%FT%T%z", info);
-        fprintf(fp, "%s %s\n", buffer, "unimplemented request");
-        fflush(fp);
-    }
+        dprintf(file_desc, "%s %s\n", buffer, "unimplemented request");
 }
 
-void updatefile_ipaddress(FILE *fp, message_t *parsed_dns_message)
+void updatefile_ipaddress(int file_desc, message_t *parsed_dns_message)
 {
-    if (fp)
-    {
         char str[INET6_ADDRSTRLEN];
         const char * string_ipv6 = inet_ntop(AF_INET6, parsed_dns_message->answers->rd_data.aaaa_record.addr, str, INET6_ADDRSTRLEN);
         time_t rawtime;
@@ -84,7 +74,5 @@ void updatefile_ipaddress(FILE *fp, message_t *parsed_dns_message)
 
         info = localtime(&rawtime);
         strftime(buffer, 80, "%FT%T%z", info);
-        fprintf(fp, "%s %s is at %s\n", buffer, parsed_dns_message->answers->name, string_ipv6);
-        fflush(fp);
-    }
+        dprintf(file_desc, "%s %s is at %s\n", buffer, parsed_dns_message->answers->name, string_ipv6);
 }

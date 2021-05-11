@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <semaphore.h>
 #include <netdb.h>
+#include <fcntl.h>
 #include "helper1.h"
 #include "dns.h"
 
@@ -36,7 +37,7 @@ int server_socket_fd;
 // Semaphore of the File access
 sem_t sem_io;
 
-FILE *fp = NULL;
+int file_desp;
 
 int main(int argc, char *argv[])
 {
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
     sem_init(&sem_io,0,1);
 
     /*Setup the file pointer for the log file*/
-    fp = fopen("./dns_svr.log","w");
+    file_desp = open("./dns_svr.log", O_WRONLY | O_APPEND | O_CREAT, 0644);
 
     /* Initialise pthread attribute to create detached threads. */
     if (pthread_attr_init(&pthread_client_attr) != 0) {
@@ -244,10 +245,10 @@ void *pthread_routine(void *arg)
     // 3. Close the file
     // Exit Critical section
     sem_wait(&sem_io);
-    updatefile_requested(fp,dns_request_msg.questions->qName);
+    updatefile_requested(file_desp,dns_request_msg.questions->qName);
     if (dns_request_msg.questions->qType != AAAA_Resource_RecordType)
     {
-        updatefile_unimplemented_request(fp);
+        updatefile_unimplemented_request(file_desp);
     }
     sem_post(&sem_io);
 
@@ -274,7 +275,7 @@ void *pthread_routine(void *arg)
         sem_wait(&sem_io);
         if (dns_request_msg.byte.u.rcode == Ok_ResponseType)
         {
-            updatefile_ipaddress(fp, &dns_request_msg);
+            updatefile_ipaddress(file_desp, &dns_request_msg);
         }
         sem_post(&sem_io);
 
@@ -346,6 +347,6 @@ void *pthread_routine(void *arg)
 void signal_handler(int signal_number)
 {
     close(server_socket_fd);
-    fclose(fp);
+    close(file_desp);
     exit(0);
 }
