@@ -83,25 +83,53 @@ void print_message(message_t *msg)
     printf("}\n");
 }
 
-char *decode_domain_name(const uint8_t **buf, uint32_t len)
+char *get_domain_in_question(const uint8_t **buffer, int packet_size)
 {
-    char domain[256];
-    int i;
-    for (i = 1; i < MIN(256, len); i += 1)
-    {
-        uint8_t c = (*buf)[i];
-        if (c == 0) {
-            domain[i - 1] = 0;
-            *buf += i + 1;
-            return strdup(domain);
-        } else if (c <= 63) {
-            domain[i - 1] = '.';
-        } else {
-            domain[i - 1] = c;
-        }
-    }
+    char *domain_name_pointer = (char*)*buffer;
+    char *domain_name = NULL;
+    char *tmp_ptr = NULL;
+    int name_part_len = 0;
+    int dn_len = 0;
 
-    return NULL;
+    do {
+        /* Get the length of the next part of the domain name */
+        name_part_len = (int) domain_name_pointer[0];
+
+        /* If the length is zero or invalid, then stop processing the domain name */
+        if((name_part_len <= 0) || (name_part_len > (packet_size))){
+            break;
+        }
+        domain_name_pointer++;
+
+        /* Reallocate domain_name pointer to name_part_len plus two bytes;
+         * one byte for the period, and one more for the trailing NULL byte.
+         */
+        tmp_ptr = domain_name;
+        domain_name = realloc(domain_name,(dn_len+name_part_len+1+1));
+        if(domain_name == NULL){
+            if(tmp_ptr) free(tmp_ptr);
+            perror("Realloc Failure");
+            return NULL;
+        }
+        memset(domain_name+dn_len,0,name_part_len+1+1);
+
+        /* Concatenate this part of the domain name, plus the period */
+        strncat(domain_name,domain_name_pointer,name_part_len);
+        //strncat(domain_name,".",1);
+
+        /* Keep track of how big domain_name is, and point
+         * domain_name_pointer to the next part of the domain name.
+         */
+        dn_len += name_part_len + 1 + 1;
+        domain_name_pointer += name_part_len;
+        if (domain_name_pointer[0] > 0)
+        {
+            strncat(domain_name,".",1);
+        }
+    } while(name_part_len > 0);
+
+    *buffer += (dn_len-1);
+    return domain_name;
 }
 
 // foo.bar.com => 3foo3bar3com0
@@ -160,7 +188,7 @@ int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
     for (int i = 0; i < msg->qdCount; ++i)
     {
         question_t *q = malloc(sizeof(question_t));
-        q->qName = decode_domain_name(&buffer, buffer_size);
+        q->qName = get_domain_in_question(&buffer, buffer_size);
         q->qType = get16bits(&buffer);
         q->qClass = get16bits(&buffer);
 
@@ -185,6 +213,7 @@ int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
         q->ttl =  get16bits(&buffer) << 16 | get16bits(&buffer);
         q->rd_length = get16bits(&buffer);
         memcpy(&q->rd_data.aaaa_record, buffer,q->rd_length);
+        buffer += q->rd_length;
 
         // prepend question to questions list
         q->next = msg->answers;

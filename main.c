@@ -19,27 +19,32 @@
 #define NONBLOCKING 1
 
 int next_hierarchy_dns_server_port;
-char * next_hierarchy_dns_server_name;
-
+char *next_hierarchy_dns_server_name;
 
 /* Thread routine to serve connection to client. */
-void *pthread_routine(void *arg);
+void *
+pthread_routine(void *arg);
 
 /* Signal handler to handle SIGTERM and SIGINT signals. */
-void signal_handler(int signal_number);
+void
+signal_handler(int signal_number);
 
-void SetupSignalHandler();
+void
+SetupSignalHandler();
 
-int CreateServerSocket(int port);
+int
+CreateServerSocket(int port);
 
 int server_socket_fd;
 
 // Semaphore of the File access
 sem_t sem_io;
+sem_t sem_cache;
 
 int file_desp;
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
     int port, new_socket_fd;
     pthread_attr_t pthread_client_attr;
@@ -67,27 +72,32 @@ int main(int argc, char *argv[])
     SetupSignalHandler();
 
     /* Setup the semaphore of IO*/
-    sem_init(&sem_io,0,1);
+    sem_init(&sem_io, 0, 1);
+    sem_init(&sem_cache, 0, 1);
 
     /*Setup the file pointer for the log file*/
     file_desp = open("./dns_svr.log", O_WRONLY | O_APPEND | O_CREAT, 0644);
 
     /* Initialise pthread attribute to create detached threads. */
-    if (pthread_attr_init(&pthread_client_attr) != 0) {
+    if (pthread_attr_init(&pthread_client_attr) != 0)
+    {
         perror("pthread_attr_init");
         exit(1);
     }
-    if (pthread_attr_setdetachstate(&pthread_client_attr, PTHREAD_CREATE_DETACHED) != 0) {
+    if (pthread_attr_setdetachstate(&pthread_client_attr, PTHREAD_CREATE_DETACHED) != 0)
+    {
         perror("pthread_attr_setdetachstate");
         exit(1);
     }
 
-    while (1) {
+    while (1)
+    {
 
         /* Accept connection to client. */
-        client_address_len = sizeof (client_address);
-        new_socket_fd = accept(server_socket_fd, (struct sockaddr *)&client_address, &client_address_len);
-        if (new_socket_fd == -1) {
+        client_address_len = sizeof(client_address);
+        new_socket_fd = accept(server_socket_fd, (struct sockaddr *) &client_address, &client_address_len);
+        if (new_socket_fd == -1)
+        {
             perror("accept");
             continue;
         }
@@ -96,7 +106,8 @@ int main(int argc, char *argv[])
         unsigned int *thread_arg = (unsigned int *) malloc(sizeof(unsigned int));
         *thread_arg = new_socket_fd;
         /* Create thread to serve connection to client. */
-        if (pthread_create(&pthread, &pthread_client_attr, pthread_routine, (void *)thread_arg) != 0) {
+        if (pthread_create(&pthread, &pthread_client_attr, pthread_routine, (void *) thread_arg) != 0)
+        {
             perror("pthread_create");
             continue;
         }
@@ -105,14 +116,14 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-
-int CreateServerSocket(int port)
+int
+CreateServerSocket(int port)
 {
     struct sockaddr_in address;
     int socket_fd;
 
     /* Initialise IPv4 address. */
-    memset(&address, 0, sizeof (address));
+    memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     address.sin_addr.s_addr = INADDR_ANY;
@@ -125,13 +136,15 @@ int CreateServerSocket(int port)
     }
 
     /* Bind address to socket. */
-    if (bind(socket_fd, (struct sockaddr *)&address, sizeof (address)) == -1) {
+    if (bind(socket_fd, (struct sockaddr *) &address, sizeof(address)) == -1)
+    {
         perror("bind");
         exit(1);
     }
 
     /* Listen on socket. */
-    if (listen(socket_fd, BACKLOG) == -1) {
+    if (listen(socket_fd, BACKLOG) == -1)
+    {
         perror("listen");
         exit(1);
     }
@@ -142,24 +155,30 @@ int CreateServerSocket(int port)
     return socket_fd;
 }
 
-void SetupSignalHandler() {/* Assign signal handlers to signals. */
-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+void
+SetupSignalHandler()
+{/* Assign signal handlers to signals. */
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+    {
         perror("signal");
         exit(1);
     }
-    if (signal(SIGTERM, signal_handler) == SIG_ERR) {
+    if (signal(SIGTERM, signal_handler) == SIG_ERR)
+    {
         perror("signal");
         exit(1);
     }
-    if (signal(SIGINT, signal_handler) == SIG_ERR) {
+    if (signal(SIGINT, signal_handler) == SIG_ERR)
+    {
         perror("signal");
         exit(1);
     }
 }
 
-int send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_len)
+int
+send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_len)
 {
-    struct sockaddr_in     servaddr;
+    struct sockaddr_in servaddr;
     struct hostent *server_host;
 
     /* Get server host from server name. */
@@ -181,12 +200,12 @@ int send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_
     return 0;
 }
 
-
-int SetupUpstreamServerSocket(char *servername)
+int
+SetupUpstreamServerSocket(char *servername)
 {
     int sockfd;
     // Creating socket file descriptor
-    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 )
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
     {
         perror("socket creation failed");
         exit(EXIT_FAILURE);
@@ -194,13 +213,14 @@ int SetupUpstreamServerSocket(char *servername)
     return sockfd;
 }
 
-void *pthread_routine(void *arg)
+void *
+pthread_routine(void *arg)
 {
     //Read from the client socket and print the received message on the screen
     uint8_t buffer[SOCKET_BUFF_SIZE] = {0};
     memset(buffer, 0x00, SOCKET_BUFF_SIZE);
 
-    int client_socket = *(int*) arg;
+    int client_socket = *(int *) arg;
     free(arg);
 
     /* Setup UDP client socket for upstream server */
@@ -235,7 +255,7 @@ void *pthread_routine(void *arg)
 
     message_t dns_request_msg;
     memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
-    decode_dns_msg( &dns_request_msg, buffer, dns_request_length);
+    decode_dns_msg(&dns_request_msg, buffer, dns_request_length);
     int incoming_request_id = dns_request_msg.id;
     print_message(&dns_request_msg);
 
@@ -245,7 +265,7 @@ void *pthread_routine(void *arg)
     // 3. Close the file
     // Exit Critical section
     sem_wait(&sem_io);
-    updatefile_requested(file_desp,dns_request_msg.questions->qName);
+    updatefile_requested(file_desp, dns_request_msg.questions->qName);
     if (dns_request_msg.questions->qType != AAAA_Resource_RecordType)
     {
         updatefile_unimplemented_request(file_desp);
@@ -262,8 +282,13 @@ void *pthread_routine(void *arg)
         // Wait for the response
         memset(buffer, 0x00, SOCKET_BUFF_SIZE);
         socklen_t len;
-        struct sockaddr_in     servaddr;
-        int bytes_received = recvfrom(upstream_server_sockfd, buffer, SOCKET_BUFF_SIZE,MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+        struct sockaddr_in servaddr;
+        int bytes_received = recvfrom(upstream_server_sockfd,
+                                      buffer,
+                                      SOCKET_BUFF_SIZE,
+                                      MSG_WAITALL,
+                                      (struct sockaddr *) &servaddr,
+                                      &len);
         if (bytes_received <= 0)
         {
             perror("error in recvfrom");
@@ -271,7 +296,7 @@ void *pthread_routine(void *arg)
 
         memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
 
-        decode_dns_msg( &dns_request_msg, buffer, bytes_received);
+        decode_dns_msg(&dns_request_msg, buffer, bytes_received);
         sem_wait(&sem_io);
         if (dns_request_msg.byte.u.rcode == Ok_ResponseType)
         {
@@ -285,15 +310,15 @@ void *pthread_routine(void *arg)
         memset(response_msg, 0x00, sizeof(char) * (bytes_received + 2));
 
         // add length
-        put16bits(&response_msg,bytes_received);
+        put16bits(&response_msg, bytes_received);
 
         // add oroginal request
-        put16bits(&response_msg,incoming_request_id);
+        put16bits(&response_msg, incoming_request_id);
 
         // copy the response received from the server
-        memcpy(response_msg, &buffer[2], bytes_received-2);
+        memcpy(response_msg, &buffer[2], bytes_received - 2);
 
-        int bytes_written = write(client_socket,resp_ptr,bytes_received+2);
+        int bytes_written = write(client_socket, resp_ptr, bytes_received + 2);
         if (bytes_written <= 0)
         {
             perror("error in write");
@@ -332,9 +357,9 @@ void *pthread_routine(void *arg)
         encode_msg(&error_message, &resp_ptr);
         int len = resp_ptr - response_msg - 2;
         resp_ptr = response_msg;
-        put16bits(&resp_ptr,len);
+        put16bits(&resp_ptr, len);
 
-        int bytes_written = write(client_socket,response_msg,sizeof(message_t) + 2);
+        int bytes_written = write(client_socket, response_msg, sizeof(message_t) + 2);
         if (bytes_written <= 0)
         {
             perror("error in write");
@@ -344,7 +369,8 @@ void *pthread_routine(void *arg)
     return NULL;
 }
 
-void signal_handler(int signal_number)
+void
+signal_handler(int signal_number)
 {
     close(server_socket_fd);
     close(file_desp);

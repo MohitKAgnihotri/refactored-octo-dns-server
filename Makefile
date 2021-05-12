@@ -5,7 +5,8 @@
 # BIN - binary
 CC=clang
 OBJ=helper1.o dns.o
-COPT=-Wall -Wpedantic -g -lpthread
+COPT=-Wall -Wpedantic -g 
+LCOPT=-lpthread
 BIN_PHASE2=dns_svr
 
 # Running "make" with no argument will make the first target in the file
@@ -17,7 +18,7 @@ all: $(BIN_PHASE2)
 # (Note that spaces will not work.)
 
 $(BIN_PHASE2): main.c dns.c helper1.c $(OBJ)
-	$(CC) -o $(BIN_PHASE2) main.c $(OBJ) $(COPT)
+	$(CC) -o $(BIN_PHASE2) main.c $(OBJ) $(COPT) $(LCOPT)
 
 # Wildcard rule to make any  .o  file,
 # given a .c and .h file with the same leading filename component
