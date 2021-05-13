@@ -4,8 +4,8 @@
 # COPT - compiler flags
 # BIN - binary
 CC=clang
-OBJ=helper1.o dns.o
-COPT=-Wall -Wpedantic -g 
+OBJ=helper1.o dns.o tick_timer.o dns_cache.o file_io.o
+COPT=-Wall -Wpedantic
 LCOPT=-lpthread
 BIN_PHASE2=dns_svr
 
@@ -17,7 +17,7 @@ all: $(BIN_PHASE2)
 #     <tab>commands_to_make_target
 # (Note that spaces will not work.)
 
-$(BIN_PHASE2): main.c dns.c helper1.c $(OBJ)
+$(BIN_PHASE2): main.c dns.c helper1.c tick_timer.c dns_cache.c file_io.c $(OBJ)
 	$(CC) -o $(BIN_PHASE2) main.c $(OBJ) $(COPT) $(LCOPT)
 
 # Wildcard rule to make any  .o  file,

@@ -6,7 +6,7 @@
 #include "dns_cache.h"
 
 
-#define MAX_DNS_CACHE_SIZE 10
+#define MAX_DNS_CACHE_SIZE 5
 sem_t sem_cache;
 
 dns_cache_t dns_cache[MAX_DNS_CACHE_SIZE] = {0};
