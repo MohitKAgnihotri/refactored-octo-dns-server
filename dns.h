@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #ifndef REFACTORED_OCTO_DNS_SERVER__DNS_H
 #define REFACTORED_OCTO_DNS_SERVER__DNS_H
