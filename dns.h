@@ -159,5 +159,6 @@ typedef struct message {
 int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size);
 int encode_msg(message_t *msg, uint8_t **buffer);
 void print_message(message_t *msg);
+void dns_free_message(message_t *msg);
 
 #endif //REFACTORED_OCTO_DNS_SERVER__DNS_H

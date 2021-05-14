@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <unistd.h>
 #include "dns.h"
 #include "file_io.h"
 
@@ -38,7 +39,6 @@ void updatefile_unimplemented_request( void )
 
 void updatefile_ipaddress(message_t *parsed_dns_message)
 {
-
   sem_wait(&sem_io);
   char str[INET6_ADDRSTRLEN];
   resource_record_t *temp = parsed_dns_message->answers;
@@ -73,3 +73,10 @@ void updatefile_eviction(char *domainNameold, char *domainNameNew)
   dprintf(file_desp, "%s replacing %s by %s\n", buffer, domainNameold, domainNameNew);
   sem_post(&sem_io);
 }
+
+void file_io_de_init()
+{
+  close(file_desp);
+}
+
+

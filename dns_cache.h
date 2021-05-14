@@ -14,4 +14,6 @@ typedef struct dns_cache
 void dns_cache_time_tick_handler(void);
 void dns_cache_init(void);
 void dns_cache_add_entry(resource_record_t *record);
+bool dns_cache_isentry_exist(char *name);
+void dns_cache_de_init( void );
 #endif //DNSSERVER__DNS_CACHE_H

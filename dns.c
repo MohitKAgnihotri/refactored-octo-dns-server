@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "dns_cache.h"
 #include "helper1.h"
 #include "dns.h"
 
@@ -139,18 +140,33 @@ int decode_dns_msg(message_t *msg, const uint8_t *buffer, uint32_t buffer_size)
   for (int i = 0; i < msg->anCount; ++i)
   {
     resource_record_t *q = malloc(sizeof(resource_record_t));
+    memset(q,0x00, sizeof(resource_record_t));
     q->name = strdup(msg->questions->qName);
     get16bits(&buffer);
     q->type = get16bits(&buffer);
     q->class = get16bits(&buffer);
     q->ttl = get16bits(&buffer) << 16 | get16bits(&buffer);
+    if (dns_cache_isentry_exist(msg->questions->qName))
+    {
+
+    }
     q->rd_length = get16bits(&buffer);
     memcpy(&q->rd_data.aaaa_record, buffer, q->rd_length);
     buffer += q->rd_length;
 
     // prepend question to questions list
-    q->next = msg->answers;
-    msg->answers = q;
+    if (msg->answers)
+    {
+      resource_record_t *curr = msg->answers;
+      while(curr->next != NULL)
+        curr = curr->next;
+      curr->next = q;
+      q->next = NULL;
+    }
+    else
+    {
+      msg->answers = q;
+    }
   }
   return 0;
 }
@@ -223,5 +239,57 @@ int encode_msg(message_t *msg, uint8_t **buffer)
   rc |= encode_resource_records(msg->additionals, buffer);
 
   return rc;
+}
+
+void dns_free_resource_record(resource_record_t *record)
+{
+  resource_record_t *current_record = record;
+  resource_record_t *temp = NULL;
+  if (current_record != NULL)
+  {
+    free(current_record->name);
+    temp = current_record;
+    current_record = current_record->next;
+    free(temp);
+  }
+}
+
+void dns_free_questions(question_t *question)
+{
+  question_t *current_question = question;
+  question_t *temp = NULL;
+  if (current_question != NULL)
+  {
+    free(current_question->qName);
+    temp = current_question;
+    current_question = current_question->next;
+    free(temp);
+  }
+}
+
+void dns_free_message(message_t *msg)
+{
+  if (msg)
+  {
+    if (msg->questions)
+    {
+      dns_free_questions(msg->questions);
+    }
+
+    if (msg->answers)
+    {
+      dns_free_resource_record(msg->answers);
+    }
+
+    if (msg->additionals)
+    {
+      dns_free_resource_record(msg->additionals);
+    }
+
+    if (msg->authorities)
+    {
+      dns_free_resource_record(msg->authorities);
+    }
+  }
 }
 

@@ -102,6 +102,8 @@ void dns_cache_add_entry(resource_record_t *record)
     {
       if (!dns_cache[i].is_in_use)
       {
+        if (dns_cache[i].cached_dns_record.name)
+          free(dns_cache[i].cached_dns_record.name);
         dns_cache[i].cached_dns_record.name = strdup(record->name);
         dns_cache[i].cached_dns_record.ttl = record->ttl + time(NULL);
         dns_cache[i].cached_dns_record.type = record->type;
@@ -111,7 +113,6 @@ void dns_cache_add_entry(resource_record_t *record)
         failed_to_insert = false;
         dns_cache[i].is_in_use = true;
         break;
-
       }
     }
   }
@@ -122,6 +123,8 @@ void dns_cache_add_entry(resource_record_t *record)
     if (entry_to_evict < MAX_DNS_CACHE_SIZE && entry_to_evict >= 0)
     {
       updatefile_eviction(dns_cache[entry_to_evict].cached_dns_record.name, record->name);
+      if (dns_cache[entry_to_evict].cached_dns_record.name)
+        free(dns_cache[entry_to_evict].cached_dns_record.name);
       dns_cache[entry_to_evict].cached_dns_record.name = strdup(record->name);
       dns_cache[entry_to_evict].cached_dns_record.ttl = record->ttl + time(NULL);
       dns_cache[entry_to_evict].cached_dns_record.type = record->type;
@@ -134,5 +137,23 @@ void dns_cache_add_entry(resource_record_t *record)
 
 void dns_cache_de_init( void )
 {
+  for (int i = 0; i < MAX_DNS_CACHE_SIZE; i++)
+  {
+    if (dns_cache[i].is_in_use)
+    {
+      free(dns_cache[i].cached_dns_record.name);
+    }
+  }
+}
 
+bool dns_cache_isentry_exist(char *name)
+{
+  for (int i = 0; i < MAX_DNS_CACHE_SIZE; i++)
+  {
+    if (dns_cache[i].is_in_use && !strncmp(dns_cache[i].cached_dns_record.name,name, strlen(name)))
+    {
+      return true;
+    }
+  }
+  return false;
 }

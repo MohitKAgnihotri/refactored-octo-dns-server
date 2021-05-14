@@ -208,12 +208,16 @@ int SetupUpstreamServerSocket(char *servername)
 
 void *pthread_routine(void *arg)
 {
+  bool decrement_ttl;
   //Read from the client socket and print the received message on the screen
   uint8_t buffer[SOCKET_BUFF_SIZE] = {0};
   memset(buffer, 0x00, SOCKET_BUFF_SIZE);
 
   int client_socket = *(int *) arg;
   free(arg);
+
+  message_t dns_request_msg_client;
+  message_t dns_request_msg_upstream;
 
   /* Setup UDP client socket for upstream server */
   int upstream_server_sockfd = SetupUpstreamServerSocket(next_hierarchy_dns_server_name);
@@ -243,10 +247,10 @@ void *pthread_routine(void *arg)
     exit(0);
   }
 
-  message_t dns_request_msg;
-  memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
-  decode_dns_msg(&dns_request_msg, buffer, dns_request_length);
-  int incoming_request_id = dns_request_msg.id;
+
+  memset(&dns_request_msg_client, 0x00, sizeof(dns_request_msg_client));
+  decode_dns_msg(&dns_request_msg_client, buffer, dns_request_length);
+  int incoming_request_id = dns_request_msg_client.id;
 
   // enter critical section
   // 1. Open file
@@ -254,13 +258,18 @@ void *pthread_routine(void *arg)
   // 3. Close the file
   // Exit Critical section
 
-  updatefile_requested(dns_request_msg.questions->qName);
-  if (dns_request_msg.questions->qType != AAAA_Resource_RecordType)
+  updatefile_requested(dns_request_msg_client.questions->qName);
+
+  if (dns_cache_isentry_exist(dns_request_msg_client.questions->qName))
+  {
+    decrement_ttl = true;
+  }
+  if (dns_request_msg_client.questions->qType != AAAA_Resource_RecordType)
   {
     updatefile_unimplemented_request();
   }
 
-  if (dns_request_msg.questions->qType == AAAA_Resource_RecordType)
+  if (dns_request_msg_client.questions->qType == AAAA_Resource_RecordType)
   {
     // Check if the request can be served from local cache
 
@@ -269,7 +278,7 @@ void *pthread_routine(void *arg)
 
     // Wait for the response
     memset(buffer, 0x00, SOCKET_BUFF_SIZE);
-    socklen_t len;
+    socklen_t len = 0;
     struct sockaddr_in servaddr;
     int bytes_received = recvfrom(upstream_server_sockfd,
                                   buffer,
@@ -282,12 +291,12 @@ void *pthread_routine(void *arg)
       perror("error in recvfrom");
     }
 
-    memset(&dns_request_msg, 0x00, sizeof(dns_request_msg));
-    decode_dns_msg(&dns_request_msg, buffer, bytes_received);
+    memset(&dns_request_msg_upstream, 0x00, sizeof(dns_request_msg_upstream));
+    decode_dns_msg(&dns_request_msg_upstream, buffer, bytes_received);
 
-    if (dns_request_msg.answers)
+    if (dns_request_msg_upstream.answers)
     {
-      resource_record_t *temp = dns_request_msg.answers;
+      resource_record_t *temp = dns_request_msg_upstream.answers;
       while (temp != NULL)
       {
         dns_cache_add_entry(temp);
@@ -295,9 +304,9 @@ void *pthread_routine(void *arg)
       }
     }
 
-    if (dns_request_msg.byte.u.rcode == Ok_ResponseType && dns_request_msg.answers != NULL)
+    if (dns_request_msg_upstream.byte.u.rcode == Ok_ResponseType && dns_request_msg_upstream.answers != NULL)
     {
-      updatefile_ipaddress(&dns_request_msg);
+      updatefile_ipaddress(&dns_request_msg_upstream);
     }
 
     // Send the response to the server
@@ -320,8 +329,11 @@ void *pthread_routine(void *arg)
       perror("error in write");
     }
 
+    free(resp_ptr);
+
     // Update the cache
-  } else
+  }
+  else
   {
     uint8_t *response_msg = malloc(1024);
     uint8_t *resp_ptr = response_msg + 2;
@@ -361,11 +373,18 @@ void *pthread_routine(void *arg)
     }
   }
 
+  dns_free_message(&dns_request_msg_upstream);
+  dns_free_message(&dns_request_msg_client);
+
   return NULL;
 }
 
 void signal_handler_main(int signal_number)
 {
+
+  printf("Caught SIGNINT");
   close(server_socket_fd);
+  dns_cache_de_init();
+  file_io_de_init();
   exit(0);
 }
