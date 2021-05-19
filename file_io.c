@@ -19,7 +19,8 @@ void FormatTime(char *buffer)
   strftime(buffer, 80, "%FT%T%z", info);
 }
 
-void updatefile_requested(char *domainName)
+/* Function is used to write domain name for which request is received */
+void file_io_update_domain_name(char *domainName)
 {
   sem_wait(&sem_io);
   char buffer[80];
@@ -28,7 +29,8 @@ void updatefile_requested(char *domainName)
   sem_post(&sem_io);
 }
 
-void updatefile_unimplemented_request( void )
+/* Function is used to log un-supported request */
+void file_io_update_unimplemented_request_type(void )
 {
   sem_wait(&sem_io);
   char buffer[80];
@@ -37,22 +39,21 @@ void updatefile_unimplemented_request( void )
   sem_post(&sem_io);
 }
 
-void updatefile_ipaddress(message_t *parsed_dns_message)
+/* Function is used to write log IP address */
+void file_io_log_ip_address(message_t *parsed_dns_message)
 {
   sem_wait(&sem_io);
-  char str[INET6_ADDRSTRLEN];
-  resource_record_t *temp = parsed_dns_message->answers;
-
-  while (temp != NULL)
+  if (parsed_dns_message && parsed_dns_message->answers->type == AAAA_Resource_RecordType)
   {
+    char str[INET6_ADDRSTRLEN];
+
     const char *string_ipv6 =
-        inet_ntop(AF_INET6, temp->rd_data.aaaa_record.addr, str, INET6_ADDRSTRLEN);
+        inet_ntop(AF_INET6, parsed_dns_message->answers->rd_data.aaaa_record.addr, str, INET6_ADDRSTRLEN);
 
     char buffer[80];
     FormatTime(buffer);
 
-    dprintf(file_desp, "%s %s is at %s\n", buffer, temp->name, string_ipv6);
-    temp = temp->next;
+    dprintf(file_desp, "%s %s is at %s\n", buffer, parsed_dns_message->answers->name, string_ipv6);
   }
   sem_post(&sem_io);
 }
@@ -64,8 +65,8 @@ void file_io_init(char *file_name)
   sem_init(&sem_io, 0, 1);
 }
 
-
-void updatefile_eviction(char *domainNameold, char *domainNameNew)
+/* Function is used to log cache eviction event */
+void file_io_log_cache_eviction(char *domainNameold, char *domainNameNew)
 {
   sem_wait(&sem_io);
   char buffer[80];
@@ -74,6 +75,7 @@ void updatefile_eviction(char *domainNameold, char *domainNameNew)
   sem_post(&sem_io);
 }
 
+/*Close the file descriptor. */
 void file_io_de_init()
 {
   close(file_desp);

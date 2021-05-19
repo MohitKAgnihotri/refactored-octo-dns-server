@@ -85,10 +85,12 @@ int dns_cache_find_entry_to_evict( void )
 
 }
 
+/* This function is used to add new entry to the cache */
 void dns_cache_add_entry(resource_record_t *record)
 {
   int recordIndex;
   bool failed_to_insert = true;
+  /*Check if the record already exist, if yes, update the TTL for the entry*/
   if (isRecordExist(record, &recordIndex))
   {
     if (recordIndex < MAX_DNS_CACHE_SIZE && recordIndex >= 0)
@@ -98,6 +100,7 @@ void dns_cache_add_entry(resource_record_t *record)
     }
   } else
   {
+    /*Try to find the a free Cache entry and if found, add it to the index */
     for(int i = 0; i < MAX_DNS_CACHE_SIZE; i++)
     {
       if (!dns_cache[i].is_in_use)
@@ -117,12 +120,14 @@ void dns_cache_add_entry(resource_record_t *record)
     }
   }
 
+  /*If we were not able to find a free entry, find the entry which is about to be evicted.
+   * The eviction algorithm tries to find the entry which is about the expire */
   if (!failed_to_insert)
   {
     uint32_t entry_to_evict = dns_cache_find_entry_to_evict();
     if (entry_to_evict < MAX_DNS_CACHE_SIZE && entry_to_evict >= 0)
     {
-      updatefile_eviction(dns_cache[entry_to_evict].cached_dns_record.name, record->name);
+      file_io_log_cache_eviction(dns_cache[entry_to_evict].cached_dns_record.name, record->name);
       if (dns_cache[entry_to_evict].cached_dns_record.name)
         free(dns_cache[entry_to_evict].cached_dns_record.name);
       dns_cache[entry_to_evict].cached_dns_record.name = strdup(record->name);
@@ -135,6 +140,7 @@ void dns_cache_add_entry(resource_record_t *record)
   }
 }
 
+/* De-init the cache and release all the memory */
 void dns_cache_de_init( void )
 {
   for (int i = 0; i < MAX_DNS_CACHE_SIZE; i++)
@@ -146,6 +152,7 @@ void dns_cache_de_init( void )
   }
 }
 
+/* Check if the domain exist in the dns cache */
 bool dns_cache_isentry_exist(char *name)
 {
   for (int i = 0; i < MAX_DNS_CACHE_SIZE; i++)

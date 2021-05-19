@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <semaphore.h>
 #include <netdb.h>
 #include "dns_cache.h"
 #include "tick_timer.h"
@@ -27,14 +26,14 @@ int next_hierarchy_dns_server_port;
 char *next_hierarchy_dns_server_name;
 
 /* Thread routine to serve connection to client. */
-void * pthread_routine(void *arg);
+void *client_handler(void *arg);
 
 /* Signal handler to handle SIGTERM and SIGINT signals. */
 void signal_handler_main(int signal_number);
 
-void SetupSignalHandler();
+void setup_signal_handler();
 
-int CreateServerSocket(int port);
+int create_server_socket(int port);
 
 int server_socket_fd;
 
@@ -60,10 +59,10 @@ int main(int argc, char *argv[])
   port = PORT_NUM;
 
   /*Create the server socket */
-  server_socket_fd = CreateServerSocket(port);
+  server_socket_fd = create_server_socket(port);
 
   /*Setup the signal handler*/
-  SetupSignalHandler();
+  setup_signal_handler();
 
   /* Setup file operation f*/
   file_io_init("dns_svr.log");
@@ -102,7 +101,7 @@ int main(int argc, char *argv[])
     unsigned int *thread_arg = (unsigned int *) malloc(sizeof(unsigned int));
     *thread_arg = new_socket_fd;
     /* Create thread to serve connection to client. */
-    if (pthread_create(&pthread, &pthread_client_attr, pthread_routine, (void *) thread_arg) != 0)
+    if (pthread_create(&pthread, &pthread_client_attr, client_handler, (void *) thread_arg) != 0)
     {
       perror("pthread_create");
       continue;
@@ -112,7 +111,7 @@ int main(int argc, char *argv[])
   return 0;
 }
 
-int CreateServerSocket(int port)
+int create_server_socket(int port)
 {
   struct sockaddr_in address;
   int socket_fd;
@@ -150,7 +149,7 @@ int CreateServerSocket(int port)
   return socket_fd;
 }
 
-void SetupSignalHandler()
+void setup_signal_handler()
 {
   /* Assign signal handlers to signals. */
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
@@ -172,43 +171,61 @@ void SetupSignalHandler()
 
 int send_dns_request(int socket, char *server_name, uint8_t *buffer, int buffer_len)
 {
-  struct sockaddr_in servaddr;
-  struct hostent *server_host;
-
-  /* Get server host from server name. */
-  server_host = gethostbyname(server_name);
-
-  // Filling server information
-  memset(&servaddr, 0, sizeof(servaddr));
-  servaddr.sin_family = AF_INET;
-  servaddr.sin_port = htons(next_hierarchy_dns_server_port);
-  memcpy(&servaddr.sin_addr.s_addr, server_host->h_addr, server_host->h_length);
-
-  int bytes_sent = sendto(socket, buffer, buffer_len,
-                          0, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+  uint8_t message_to_be_sent[SOCKET_BUFF_SIZE] = {0};
+  uint8_t *ptr = message_to_be_sent;
+  // add length
+  put16bits(&ptr, buffer_len);
+  memcpy(ptr, buffer, buffer_len);
+  int bytes_sent = write(socket, message_to_be_sent, buffer_len + 2);
   if (bytes_sent <= 0)
   {
-    perror("sendto");
-    return -1;
+    perror("write");
+    exit(0);
   }
   return 0;
 }
 
-int SetupUpstreamServerSocket(char *servername)
+int SetupUpstreamServerSocket()
 {
   int sockfd;
+  struct hostent *server_host;
+  struct sockaddr_in server_address;
+
   // Creating socket file descriptor
-  if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+  if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
     perror("socket creation failed");
     exit(EXIT_FAILURE);
   }
+
+  int enable = 1;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+  {
+    perror("setsockopt");
+    exit(1);
+  }
+
+  /* Get server host from server name. */
+  server_host = gethostbyname(next_hierarchy_dns_server_name);
+
+  /* Initialise IPv4 server address with server host. */
+  memset(&server_address, 0, sizeof server_address);
+  server_address.sin_family = AF_INET;
+  server_address.sin_port = htons(next_hierarchy_dns_server_port);
+  memcpy(&server_address.sin_addr.s_addr, server_host->h_addr, server_host->h_length);
+
+  /* Connect to socket with server address. */
+  if (connect(sockfd, (struct sockaddr *) &server_address, sizeof server_address) == -1)
+  {
+    perror("connect");
+    exit(1);
+  }
+
   return sockfd;
 }
 
-void *pthread_routine(void *arg)
+void *client_handler(void *arg)
 {
-  bool decrement_ttl;
   //Read from the client socket and print the received message on the screen
   uint8_t buffer[SOCKET_BUFF_SIZE] = {0};
   memset(buffer, 0x00, SOCKET_BUFF_SIZE);
@@ -220,7 +237,7 @@ void *pthread_routine(void *arg)
   message_t dns_request_msg_upstream;
 
   /* Setup UDP client socket for upstream server */
-  int upstream_server_sockfd = SetupUpstreamServerSocket(next_hierarchy_dns_server_name);
+  int upstream_server_sockfd = SetupUpstreamServerSocket();
 
   // Read 2 bytes from the TCP socket
   unsigned short dns_request_length = 0;
@@ -247,7 +264,6 @@ void *pthread_routine(void *arg)
     exit(0);
   }
 
-
   memset(&dns_request_msg_client, 0x00, sizeof(dns_request_msg_client));
   decode_dns_msg(&dns_request_msg_client, buffer, dns_request_length);
   int incoming_request_id = dns_request_msg_client.id;
@@ -258,15 +274,10 @@ void *pthread_routine(void *arg)
   // 3. Close the file
   // Exit Critical section
 
-  updatefile_requested(dns_request_msg_client.questions->qName);
-
-  if (dns_cache_isentry_exist(dns_request_msg_client.questions->qName))
-  {
-    decrement_ttl = true;
-  }
+  file_io_update_domain_name(dns_request_msg_client.questions->qName);
   if (dns_request_msg_client.questions->qType != AAAA_Resource_RecordType)
   {
-    updatefile_unimplemented_request();
+    file_io_update_unimplemented_request_type();
   }
 
   if (dns_request_msg_client.questions->qType == AAAA_Resource_RecordType)
@@ -278,21 +289,17 @@ void *pthread_routine(void *arg)
 
     // Wait for the response
     memset(buffer, 0x00, SOCKET_BUFF_SIZE);
-    socklen_t len = 0;
-    struct sockaddr_in servaddr;
-    int bytes_received = recvfrom(upstream_server_sockfd,
-                                  buffer,
-                                  SOCKET_BUFF_SIZE,
-                                  MSG_WAITALL,
-                                  (struct sockaddr *) &servaddr,
-                                  &len);
-    if (bytes_received <= 0)
+    int bytes_received = read(upstream_server_sockfd,
+                              buffer,
+                              SOCKET_BUFF_SIZE);
+    if (bytes_received < 0)
     {
-      perror("error in recvfrom");
+      perror("error in read");
+      exit(0);
     }
 
     memset(&dns_request_msg_upstream, 0x00, sizeof(dns_request_msg_upstream));
-    decode_dns_msg(&dns_request_msg_upstream, buffer, bytes_received);
+    decode_dns_msg(&dns_request_msg_upstream, &buffer[2], bytes_received - 2);
 
     if (dns_request_msg_upstream.answers)
     {
@@ -306,34 +313,16 @@ void *pthread_routine(void *arg)
 
     if (dns_request_msg_upstream.byte.u.rcode == Ok_ResponseType && dns_request_msg_upstream.answers != NULL)
     {
-      updatefile_ipaddress(&dns_request_msg_upstream);
+      file_io_log_ip_address(&dns_request_msg_upstream);
     }
 
-    // Send the response to the server
-    uint8_t *response_msg = malloc(sizeof(char) * bytes_received + 2);
-    uint8_t *resp_ptr = response_msg;
-    memset(response_msg, 0x00, sizeof(char) * (bytes_received + 2));
-
-    // add length
-    put16bits(&response_msg, bytes_received);
-
-    // add oroginal request
-    put16bits(&response_msg, incoming_request_id);
-
-    // copy the response received from the server
-    memcpy(response_msg, &buffer[2], bytes_received - 2);
-
-    int bytes_written = write(client_socket, resp_ptr, bytes_received + 2);
+    int bytes_written = write(client_socket, buffer, bytes_received);
     if (bytes_written <= 0)
     {
       perror("error in write");
     }
 
-    free(resp_ptr);
-
-    // Update the cache
-  }
-  else
+  } else
   {
     uint8_t *response_msg = malloc(1024);
     uint8_t *resp_ptr = response_msg + 2;
@@ -375,6 +364,7 @@ void *pthread_routine(void *arg)
 
   dns_free_message(&dns_request_msg_upstream);
   dns_free_message(&dns_request_msg_client);
+  close(upstream_server_sockfd);
 
   return NULL;
 }

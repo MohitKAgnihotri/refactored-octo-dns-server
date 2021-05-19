@@ -11,12 +11,6 @@ size_t get16bits(const uint8_t **buffer)
   return ntohs(value);
 }
 
-void put8bits(uint8_t **buffer, uint8_t value)
-{
-  memcpy(*buffer, &value, 1);
-  *buffer += 1;
-}
-
 void put16bits(uint8_t **buffer, uint16_t value)
 {
   value = htons(value);
@@ -24,9 +18,3 @@ void put16bits(uint8_t **buffer, uint16_t value)
   *buffer += 2;
 }
 
-void put32bits(uint8_t **buffer, uint32_t value)
-{
-  value = htonl(value);
-  memcpy(*buffer, &value, 4);
-  *buffer += 4;
-}

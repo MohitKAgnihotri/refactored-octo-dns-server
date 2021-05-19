@@ -10,6 +10,7 @@
 
 timer_handler_func timer_handler_function_for_application;
 
+/* Signal handler for the timer interrupt */
 void signal_handler(int signo)
 {
   assert(signo == SIGALRM);
@@ -26,6 +27,7 @@ void signal_handler(int signo)
 
   if (timer_handler_function_for_application)
   {
+    /*Invoke the application function */
     timer_handler_function_for_application();
   }
 }
@@ -49,6 +51,8 @@ void tick_timer_init(uint32_t sec, timer_handler_func application_fun)
   sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
   sigaction(SIGALRM, &sa, NULL);
 
+
+  /* Setup the timer for the given seconds */
   timer.it_interval.tv_sec = sec;
   timer.it_interval.tv_usec = 0;  // when timer expires, reset to 100ms
   timer.it_value = timer.it_interval;
